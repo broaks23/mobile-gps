@@ -6,6 +6,7 @@ import 'dart:math';
 
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 /// Serves only bundled renderer assets and approved region archive filenames.
 class LocalResourceServer {
@@ -104,6 +105,54 @@ class LocalResourceServer {
           Uint8List.fromList(config),
           'application/json; charset=utf-8',
         );
+        return;
+      }
+      final peaksMatch = RegExp(
+        r'^regions/([a-z0-9_-]{1,64})/peaks\.json$',
+      ).firstMatch(relative);
+      if (peaksMatch != null) {
+        final file = await _safeRegionFile(
+          peaksMatch.group(1)!,
+          'search.sqlite',
+        );
+        if (file == null) {
+          await _reject(response, HttpStatus.notFound);
+          return;
+        }
+        final db = sqlite3.open(file.path, mode: OpenMode.readOnly);
+        try {
+          final rows = db.select(
+            "SELECT name, category, longitude, latitude, elevation_m FROM places WHERE category IN ('peak','saddle','mountain_pass') LIMIT 50000",
+          );
+          final features = rows
+              .map(
+                (row) => {
+                  'type': 'Feature',
+                  'geometry': {
+                    'type': 'Point',
+                    'coordinates': [row['longitude'], row['latitude']],
+                  },
+                  'properties': {
+                    'name': row['name'],
+                    'category': row['category'],
+                    if (row['elevation_m'] != null)
+                      'ele': row['elevation_m'].toString(),
+                  },
+                },
+              )
+              .toList();
+          await _sendBytes(
+            request,
+            Uint8List.fromList(
+              utf8.encode(
+                jsonEncode({'type': 'FeatureCollection', 'features': features}),
+              ),
+            ),
+            'application/geo+json',
+          );
+        } finally {
+          db.close();
+        }
         return;
       }
       final regionMatch = RegExp(
@@ -216,6 +265,11 @@ class LocalResourceServer {
               'http://127.0.0.1:${_server.port}$_basePath/regions/$id/map.pmtiles';
           if (raw['vectorSchema'] == 'ridgewalk-hiking-v1') {
             region['vectorSchema'] = 'ridgewalk-hiking-v1';
+          }
+          if (raw['vectorSchema'] == 'shortbread-1.0') {
+            region['vectorSchema'] = 'shortbread-1.0';
+            region['peaksUrl'] =
+                'http://127.0.0.1:${_server.port}$_basePath/regions/$id/peaks.json';
           }
           if (raw['mapAttribution'] is String) {
             region['mapAttribution'] = raw['mapAttribution'] as String;

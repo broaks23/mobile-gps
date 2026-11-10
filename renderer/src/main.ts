@@ -7,6 +7,7 @@ import cyrillicFontUrl from '@fontsource/noto-sans/files/noto-sans-cyrillic-400-
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 import { hikingLayers } from './hiking-style';
+import { shortbreadLayers } from './shortbread-style';
 
 type Bounds = [number, number, number, number];
 type Region = {
@@ -14,8 +15,9 @@ type Region = {
   name: string;
   bounds: Bounds;
   mapUrl?: string;
-  vectorSchema?: 'ridgewalk-hiking-v1';
+  vectorSchema?: 'ridgewalk-hiking-v1' | 'shortbread-1.0';
   terrainUrl?: string;
+  peaksUrl?: string;
   terrainEncoding?: 'mapbox' | 'terrarium';
   attribution: string;
   mapAttribution?: string;
@@ -88,12 +90,13 @@ function styleFor(region?: Region, terrainAvailable = false): StyleSpecification
       attribution: region.mapAttribution ?? region.attribution,
     };
   }
+  if (region.peaksUrl) style.sources.peaks = { type: 'geojson', data: region.peaksUrl };
   if (terrainAvailable && region.terrainUrl) {
     style.sources.elevation = {
       type: 'raster-dem',
       url: `pmtiles://${region.terrainUrl}`,
       encoding: region.terrainEncoding ?? 'mapbox',
-      tileSize: 256,
+      tileSize: region.vectorSchema === 'shortbread-1.0' ? 512 : 256,
       attribution: region.terrainAttribution ?? region.attribution,
     };
     style.layers.push({
@@ -115,7 +118,11 @@ function styleFor(region?: Region, terrainAvailable = false): StyleSpecification
     { id: 'peak-names', type: 'symbol', source: 'hiking', 'source-layer': 'mountain_peak', layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-offset': [0, 1] }, paint: { 'text-color': '#443c37', 'text-halo-color': '#f8f5e8', 'text-halo-width': 1 } },
     { id: 'places', type: 'symbol', source: 'hiking', 'source-layer': 'place', layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'], 'text-size': ['interpolate', ['linear'], ['zoom'], 7, 11, 13, 15] }, paint: { 'text-color': '#34463f', 'text-halo-color': '#f8f5e8', 'text-halo-width': 1.5 } },
   ];
-  if (region.mapUrl) style.layers.push(...(region.vectorSchema === 'ridgewalk-hiking-v1' ? hikingLayers() : layers));
+  if (region.mapUrl) style.layers.push(...(region.vectorSchema === 'ridgewalk-hiking-v1' ? hikingLayers() : region.vectorSchema === 'shortbread-1.0' ? shortbreadLayers() : layers));
+  if (region.peaksUrl) style.layers.push(
+    { id: 'sb-peaks', type: 'circle', source: 'peaks', minzoom: 9, paint: { 'circle-color': '#4e4840', 'circle-radius': 3.5, 'circle-stroke-color': '#fff9e9', 'circle-stroke-width': 1.2 } },
+    { id: 'sb-peak-labels', type: 'symbol', source: 'peaks', minzoom: 10, layout: { 'text-field': ['concat', ['get', 'name'], ['case', ['has', 'ele'], ['concat', '\n', ['get', 'ele'], ' m'], '']], 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-offset': [0, 1.1] }, paint: { 'text-color': '#353633', 'text-halo-color': '#fff9e9', 'text-halo-width': 1.6 } },
+  );
   return style;
 }
 
@@ -160,8 +167,9 @@ async function start(): Promise<void> {
     try {
       const archive = new PMTiles(region.terrainUrl);
       const header = await archive.getHeader();
-      if (header.tileType !== TileType.Png || header.minZoom > header.maxZoom) {
-        throw new Error('DEM archive must contain PNG tiles');
+      const expectedType = region.vectorSchema === 'shortbread-1.0' ? TileType.Webp : TileType.Png;
+      if (header.tileType !== expectedType || header.minZoom > header.maxZoom) {
+        throw new Error('DEM archive has an incompatible tile format');
       }
       const zoom = header.maxZoom;
       const longitude = (region.bounds[0] + region.bounds[2]) / 2;
@@ -170,8 +178,11 @@ async function start(): Promise<void> {
       const y = Math.floor((1 - Math.asinh(Math.tan(latitude * Math.PI / 180)) / Math.PI) / 2 * 2 ** zoom);
       const tile = await archive.getZxy(zoom, x, y);
       const signature = tile && new Uint8Array(tile.data).slice(0, 8);
-      if (!signature || signature.join(',') !== '137,80,78,71,13,10,26,10') {
-        throw new Error('DEM tile at region center is missing or is not PNG');
+      const valid = signature && (expectedType === TileType.Png
+        ? signature.join(',') === '137,80,78,71,13,10,26,10'
+        : String.fromCharCode(...signature.slice(0, 4)) === 'RIFF');
+      if (!valid) {
+        throw new Error('DEM tile at region center is missing or has an invalid signature');
       }
       protocol.add(archive);
       demArchive = archive;
@@ -250,7 +261,7 @@ async function start(): Promise<void> {
       const y = (1 - Math.asinh(Math.tan(latitude * Math.PI / 180)) / Math.PI) / 2 * size;
       const tile = await demArchive.getZxy(zoom, Math.floor(x), Math.floor(y));
       if (!tile) continue;
-      const bitmap = await createImageBitmap(new Blob([tile.data], { type: 'image/png' }),
+      const bitmap = await createImageBitmap(new Blob([tile.data], { type: region?.vectorSchema === 'shortbread-1.0' ? 'image/webp' : 'image/png' }),
         { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
       try {
         const canvas = document.createElement('canvas');
@@ -397,12 +408,13 @@ async function start(): Promise<void> {
       return;
     }
     if (!mapAvailable) return;
-    const hits = map.queryRenderedFeatures(event.point, { layers: ['hiking-trails', 'hiking-routes', 'hiking-mountain', 'hiking-huts'] });
+    const hitLayers = ['hiking-trails', 'hiking-routes', 'hiking-mountain', 'hiking-huts', 'sb-trails', 'sb-huts', 'sb-peaks'].filter((id) => map.getLayer(id));
+    const hits = map.queryRenderedFeatures(event.point, { layers: hitLayers });
     if (!hits.length) return;
-    const path = hits.find((item) => item.layer.id === 'hiking-trails')?.properties;
+    const path = hits.find((item) => item.layer.id === 'hiking-trails' || item.layer.id === 'sb-trails')?.properties;
     const route = hits.find((item) => item.layer.id === 'hiking-routes')?.properties;
-    const mountain = hits.find((item) => item.layer.id === 'hiking-mountain')?.properties;
-    const hut = hits.find((item) => item.layer.id === 'hiking-huts')?.properties;
+    const mountain = hits.find((item) => item.layer.id === 'hiking-mountain' || item.layer.id === 'sb-peaks')?.properties;
+    const hut = hits.find((item) => item.layer.id === 'hiking-huts' || item.layer.id === 'sb-huts')?.properties;
     const title = route?.name || route?.ref || path?.name || mountain?.name || hut?.name || 'Map feature';
     const panel = document.createElement('div');
     panel.className = 'feature-popup';
@@ -410,7 +422,7 @@ async function start(): Promise<void> {
     heading.textContent = String(title);
     panel.append(heading);
     const details: [string, unknown][] = [
-      ['Path', path?.highway], ['SAC difficulty', path?.sac_scale], ['Trail visibility', path?.trail_visibility],
+      ['Path', path?.highway || path?.kind], ['SAC difficulty', path?.sac_scale], ['Trail visibility', path?.trail_visibility],
       ['Hiking route', route?.ref || route?.name], ['Trail marking', route?.['osmc:symbol'] || route?.colour],
       ['Elevation', mountain?.ele ? `${mountain.ele} m` : undefined], ['Type', hut?.tourism || hut?.amenity || mountain?.natural],
     ];

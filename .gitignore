@@ -5,6 +5,7 @@
 .pub/
 build/
 android/.gradle/
+android/.kotlin/
 android/captures/
 android/local.properties
 android/key.properties
@@ -22,3 +23,4 @@ node_modules
 .env
 .env.*
 !.env.example
+.idea

@@ -295,12 +295,12 @@ class _RegionManagerState extends State<RegionManager> {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const Text(
-            'Enter an HTTPS URL for a catalog of prepared region packages.',
+            'Enter an HTTPS catalog URL or a private-network HTTP URL. LAN transfers are unencrypted; use a trusted network.',
           ),
           TextField(
             controller: _url,
             keyboardType: TextInputType.url,
-            decoration: const InputDecoration(labelText: 'HTTPS catalog URL'),
+            decoration: const InputDecoration(labelText: 'Catalog URL'),
           ),
           Align(
             alignment: Alignment.centerLeft,

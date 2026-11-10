@@ -94,7 +94,7 @@ class RegionPackage {
     final detail = required('mapDetail');
     final resolution = required('terrainResolution');
     final schema = required('vectorSchema');
-    if (schema != 'ridgewalk-hiking-v1') {
+    if (schema != 'ridgewalk-hiking-v1' && schema != 'shortbread-1.0') {
       throw const FormatException('Unsupported vector schema');
     }
     final indexVersion = value['searchIndexVersion'] ?? 1;
@@ -145,17 +145,21 @@ class CatalogEntry {
   final int bytes;
   final String sha256;
 
-  static CatalogEntry parse(Object? value) {
+  static CatalogEntry parse(Object? value, {Uri? catalogUri}) {
     if (value is! Map<String, dynamic>) {
       throw const FormatException('Invalid catalog entry');
     }
     final url = Uri.tryParse(value['url']?.toString() ?? '');
     if (url == null ||
-        url.scheme != 'https' ||
-        url.host.isEmpty ||
-        url.userInfo.isNotEmpty ||
-        url.fragment.isNotEmpty) {
-      throw const FormatException('Package URL must be HTTPS');
+        !_allowedCatalogUri(url) ||
+        (url.scheme == 'http' &&
+            (catalogUri == null ||
+                catalogUri.scheme != 'http' ||
+                url.host != catalogUri.host ||
+                url.port != catalogUri.port))) {
+      throw const FormatException(
+        'Package URL must be HTTPS or on the same private LAN server',
+      );
     }
     final bytes = value['bytes'];
     final sha = value['sha256'];
@@ -175,13 +179,30 @@ class CatalogEntry {
   }
 }
 
-List<CatalogEntry> parseCatalog(Object? value) {
+bool _allowedCatalogUri(Uri uri) {
+  if (uri.host.isEmpty || uri.userInfo.isNotEmpty || uri.fragment.isNotEmpty) {
+    return false;
+  }
+  if (uri.scheme == 'https') return true;
+  if (uri.scheme != 'http') return false;
+  final parts = uri.host.split('.');
+  if (parts.length != 4) return false;
+  final bytes = parts.map(int.tryParse).toList();
+  if (bytes.any((n) => n == null || n < 0 || n > 255)) return false;
+  return bytes[0] == 10 ||
+      (bytes[0] == 172 && bytes[1]! >= 16 && bytes[1]! <= 31) ||
+      (bytes[0] == 192 && bytes[1] == 168);
+}
+
+List<CatalogEntry> parseCatalog(Object? value, {Uri? catalogUri}) {
   if (value is! Map<String, dynamic> ||
       value['catalogVersion'] != 1 ||
       value['packages'] is! List) {
     throw const FormatException('Unsupported catalog');
   }
-  final entries = (value['packages'] as List).map(CatalogEntry.parse).toList();
+  final entries = (value['packages'] as List)
+      .map((entry) => CatalogEntry.parse(entry, catalogUri: catalogUri))
+      .toList();
   if (entries.length > 1000) {
     throw const FormatException('Catalog is too large');
   }
@@ -311,8 +332,10 @@ class RegionStore {
   }
 
   Future<List<CatalogEntry>> fetchCatalog(Uri uri, {HttpClient? client}) async {
-    if (uri.scheme != 'https' || uri.host.isEmpty || uri.userInfo.isNotEmpty) {
-      throw const FormatException('Catalog URL must be HTTPS');
+    if (!_allowedCatalogUri(uri)) {
+      throw const FormatException(
+        'Use HTTPS or an HTTP URL with a private IPv4 address',
+      );
     }
     final http = client ?? HttpClient();
     try {
@@ -330,7 +353,7 @@ class RegionStore {
         }
         return bytes;
       });
-      return parseCatalog(jsonDecode(utf8.decode(body)));
+      return parseCatalog(jsonDecode(utf8.decode(body)), catalogUri: uri);
     } finally {
       if (client == null) http.close();
     }

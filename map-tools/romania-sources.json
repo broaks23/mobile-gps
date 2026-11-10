@@ -1,0 +1,39 @@
+{
+  "description": "Downloaded source data only; these files are not Ridgewalk region packages.",
+  "downloadedAt": "2026-11-10",
+  "directory": "map-tools/.cache/romania",
+  "sources": {
+    "osm": {
+      "file": "romania.osm.pbf",
+      "url": "https://download.geofabrik.de/europe/romania-latest.osm.pbf",
+      "sha256": "82d35a6467e5955792fa7efd8e94d3c6f39337124f72c9346d99ae5ff7923027",
+      "license": "ODbL 1.0; copyright OpenStreetMap contributors",
+      "note": "Use this raw extract to regenerate the hiking schema and search index; latest URL changes over time."
+    },
+    "shortbread": {
+      "file": "shortbread/romania-pmtiles-shortbread/romania.pmtiles",
+      "url": "https://data.bbbike.org/osm/pmtiles/region/europe/romania/romania.osm.pmtiles-shortbread.zip",
+      "sha256": "d5964ac8071116fbeda1d028764b543a85904f707ea6d5848dc1702a5cfdf44a",
+      "license": "ODbL 1.0; copyright OpenStreetMap contributors",
+      "note": "Zoom 0-14; Shortbread is not the Ridgewalk hiking schema and omits hiking attributes."
+    },
+    "terrain": {
+      "file": "terrain-romania.pmtiles",
+      "url": "https://download.mapterhorn.com/planet.pmtiles",
+      "sha256": "c0831be6f5c71964d03dfbf6b23685707df4810fae27161dc85c2159ea73cd5b",
+      "bounds": [20.2, 43.6, 30.3, 48.3],
+      "format": "PMTiles, Terrarium-encoded 512px WebP, zoom 0-12",
+      "attribution": "© Mapterhorn; see https://mapterhorn.com/attribution/ and mapterhorn-attribution.json in the download directory",
+      "note": "Romania-wide baseline is approximately 30 m source resolution; higher-resolution source coverage varies."
+    },
+    "satellite": {
+      "file": "satellite-2026-summer-visual.tif",
+      "url": "https://storage.svc.uvt-01.eocube.ro/mosaic/sentinel2-l2a/v1/seasonal/2026/JJA/aoi/rocs/06931c6f948d/public/visual.tif",
+      "sha256": "d721a053fb03c3a7bf1c173c927009cd58961232c1fc8898fac8880341228c37",
+      "format": "10 m true-colour Sentinel-2, cloud-optimized GeoTIFF, EPSG:3035",
+      "license": "CC BY-SA 4.0 under EOCube terms; https://eocube.ro/en/terms-and-conditions/",
+      "attribution": "EOCube.Ro Product (ROCS Project -- EOCube.ro, West University of Timisoara). Contains modified Copernicus Sentinel data 2026.",
+      "note": "Catalog metadata and item-specific attribution are in satellite-item.json in the download directory."
+    }
+  }
+}

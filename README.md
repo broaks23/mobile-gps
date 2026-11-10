@@ -25,3 +25,27 @@ The script builds locally, creates a draft GitHub release, uploads the APK and c
 The current Android release build uses the local debug signing key. A key different from the one used for an existing installation can require uninstalling the old app, which removes its stored regions. Keep the same key for updates and configure a private release key before distributing production builds.
 
 Project convention: do not add automated tests or automatically commit or push code changes.
+
+## Romania map and LAN downloads
+
+The prepared Romania package is `map-tools/.cache/romania/romania.rwpkg` (about 1.21 GB). It requires an APK built from the current code. Keep at least 2.5 GB free on the phone for downloading and installation. The package contains a z14 Shortbread OSM basemap, 30 m Mapterhorn terrain, and an offline OSM search index. Peaks and passes come from the search index; the Shortbread map does not retain SAC difficulty or hiking-route markings. The downloaded satellite mosaic is not included or supported as a map layer.
+
+To serve the package from a computer on the same Wi-Fi network, run from the repository root:
+
+```powershell
+node .\lan-server\server.mjs
+```
+
+Open Regions in the updated app, enter the printed `http://<computer-private-IP>:8765/catalog.json` address, load the catalog, and download Romania. Select the installed region after installation. Allow Node through the computer's firewall for private networks if necessary. HTTP is unencrypted: use a trusted LAN; checksums detect corruption but do not authenticate a malicious server or network. Close the server with Ctrl+C. For another prepared package, use `node .\lan-server\server.mjs --package <path-to-rwpkg> --entry <path-to-catalog-entry.json>`; the sidecar contains package metadata, archive size, and SHA-256.
+
+The large data files are ignored by Git. To rebuild the Romania package from the downloaded source files listed in `map-tools/romania-sources.json`, use Node.js 24 and run:
+
+```powershell
+cd map-tools
+npm.cmd ci
+node build-romania-search.mjs
+node package-romania.mjs
+cd ..
+```
+
+The OSM data requires attribution and is subject to the [ODbL](https://www.openstreetmap.org/copyright); terrain source credits and license details are in the package metadata and [Mapterhorn's attribution](https://mapterhorn.com/attribution/). See `map-tools/romania-sources.json` for the source provenance and checksums.
