@@ -1,0 +1,37 @@
+{
+  "name": "Bucegi Mountains hiking and terrain sample",
+  "bounds": [
+    25.41,
+    45.36,
+    25.52,
+    45.45
+  ],
+  "terrainEncoding": "mapbox",
+  "attribution": "Derived elevation tiles from Copernicus WorldDEM-30; © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA; all rights reserved.",
+  "source": "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N45_00_E025_00_DEM/Copernicus_DSM_COG_10_N45_00_E025_00_DEM.tif",
+  "sourceSha256": "24b51fbeb6bfa747e7c8438a58d60e6af891218fdc1e15829c93c85a2251b026",
+  "sourceResolution": "1 arc-second (~30 m at equator)",
+  "sourceType": "Copernicus DEM GLO-30 Public digital surface model",
+  "vectorSchema": "ridgewalk-hiking-v1",
+  "mapAttribution": "© OpenStreetMap contributors · ODbL 1.0",
+  "terrainAttribution": "Derived elevation tiles from Copernicus WorldDEM-30; © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA; all rights reserved.",
+  "mapSource": "https://api.openstreetmap.org/api/0.6/map?bbox=25.41,45.36,25.52,45.45",
+  "mapSourceDate": "2026-11-10",
+  "mapSourceSha256": "52a7650cc224c9348d4bdfc20260fd8b5d174943072d19e52aebe0d39a86c7fc",
+  "mapSha256": "eda0137883a0ec38d980e02a1ee6b8dfa6df2fe9a15ffa41b1f091f953a143f7",
+  "mapLicense": "ODbL 1.0",
+  "mapBounds": [
+    25.41,
+    45.36,
+    25.52,
+    45.45
+  ],
+  "terrainBounds": [
+    25.32,
+    45.3,
+    25.62,
+    45.52
+  ],
+  "mapLicenseUrl": "https://www.openstreetmap.org/copyright",
+  "mapRawSourceSha256": "c4ce9aa695351ca03bef375b4f703c3517c9f5b046b4ce505257e94525e063cf"
+}

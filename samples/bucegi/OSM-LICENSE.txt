@@ -1,0 +1,8 @@
+Contains map data from OpenStreetMap and its contributors.
+OpenStreetMap data is available under the Open Database License 1.0 (ODbL).
+Copyright, attribution, and license details: https://www.openstreetmap.org/copyright
+Full license: https://opendatacommons.org/licenses/odbl/1.0/
+
+This Ridgewalk Bucegi vector archive is an OSM-derived database. The pinned raw
+source extract, with contributor account metadata removed, is included at
+map-tools/source/bucegi.osm.gz in this repository.

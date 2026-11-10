@@ -4,7 +4,6 @@
 .pub-cache/
 .pub/
 build/
-coverage/
 android/.gradle/
 android/captures/
 android/local.properties
@@ -14,4 +13,12 @@ ios/Flutter/ephemeral/
 renderer/node_modules/
 renderer/dist/
 .npm-cache/
-
+terrain-tools/node_modules/
+terrain-tools/.cache/
+terrain-tools/tmp/
+map-tools/node_modules/
+map-tools/.cache/
+node_modules
+.env
+.env.*
+!.env.example

@@ -1,0 +1,17 @@
+{
+  "name": "ridgewalk-map-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare:source": "node prepare-source.mjs",
+    "build:bucegi": "node build-bucegi.mjs",
+    "package:bucegi": "node package-bucegi.mjs",
+    "build:search": "node build-search-index.mjs"
+  },
+  "dependencies": {
+    "fast-xml-parser": "5.2.5",
+    "geojson-vt": "4.0.2",
+    "sql.js": "1.15.2",
+    "vt-pbf": "3.1.3"
+  }
+}
