@@ -1,0 +1,17 @@
+.dart_tool/
+.flutter-plugins*
+.packages
+.pub-cache/
+.pub/
+build/
+coverage/
+android/.gradle/
+android/captures/
+android/local.properties
+android/key.properties
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+renderer/node_modules/
+renderer/dist/
+.npm-cache/
+
