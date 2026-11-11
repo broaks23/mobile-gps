@@ -3,7 +3,7 @@ param(
     [string]$TargetCommitish,
     [switch]$BuildOnly,
     [switch]$Stable,
-    [string]$ExpectedSignerSha256 = '998e07e3fcdb375451e060ba5031b4e0ed13460e5b57aa4ee7a61afe782085b1'
+    [string]$ExpectedSignerSha256 = 'dd2701d37ff47e856d5c09c97412dc215e3b7455b1835f8b14bd917c1d0d43a9'
 )
 
 Set-StrictMode -Version Latest
@@ -86,8 +86,7 @@ try {
     Write-Host "SHA-256: $hash"
     if ($BuildOnly) { return }
 
-    # The published v0.5.0 APK has this certificate. Android refuses updates
-    # signed by another key, even when package name and version are correct.
+    # Pin the new release key so later updates retain the same certificate.
     $sdk = $env:ANDROID_HOME
     if (-not $sdk) { $sdk = $env:ANDROID_SDK_ROOT }
     if (-not $sdk) {
