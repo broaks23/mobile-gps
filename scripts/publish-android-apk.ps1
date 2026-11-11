@@ -15,8 +15,15 @@ function Invoke-Tool {
     if ($LASTEXITCODE -ne 0) { throw "$Executable failed with exit code $LASTEXITCODE." }
 }
 
-if (-not $BuildOnly -and $Tag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+([.-][A-Za-z0-9]+)*)?$') {
+if (-not $BuildOnly -and $Tag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') {
     throw 'Pass a release tag such as -Tag v0.4.1, or use -BuildOnly.'
+}
+if (-not $BuildOnly) {
+    $versionLine = Get-Content -LiteralPath (Join-Path $repo 'pubspec.yaml') | Where-Object { $_ -match '^version:\s*(\d+\.\d+\.\d+)\+(\d+)\s*$' } | Select-Object -First 1
+    if (-not $versionLine -or $versionLine -notmatch '^version:\s*(\d+\.\d+\.\d+)\+(\d+)\s*$') {
+        throw 'Set pubspec.yaml version to a stable version with an explicit Android build number, for example 0.5.0+2.'
+    }
+    if ($Tag -ne "v$($Matches[1])") { throw 'Release tag must match the pubspec.yaml version.' }
 }
 $flutter = (Get-Command flutter -ErrorAction Stop).Source
 $npmName = if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) { 'npm.cmd' } else { 'npm' }
@@ -89,7 +96,7 @@ try {
         name = "Ridgewalk $Tag"
         body = 'Built locally from the working tree. The release tag points to the selected GitHub commit, which may differ from uncommitted local changes.'
         draft = $true
-        prerelease = (-not $Stable)
+        prerelease = $false
     }
     if ($TargetCommitish) { $body.target_commitish = $TargetCommitish }
     $api = 'https://api.github.com/repos/broaks23/mobile-gps/releases'

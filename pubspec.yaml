@@ -1,7 +1,7 @@
 name: ridgewalk
 description: Offline-first hiking and 3D terrain explorer.
 publish_to: none
-version: 0.4.1
+version: 0.5.0+2
 
 environment:
   sdk: '>=3.9.0 <4.0.0'

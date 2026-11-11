@@ -434,6 +434,9 @@ class _MapPaneState extends ConsumerState<_MapPane>
       widget.server.selectRegion(result.regionId!);
       _pendingSearchResult = result;
       await _retryMap();
+    } else if (!_ready) {
+      _pendingSearchResult = result;
+      _showError('The result will appear when the map is ready.');
     } else {
       await _showSearchMarker(result);
     }
@@ -528,7 +531,7 @@ class _MapPaneState extends ConsumerState<_MapPane>
                     _MapButton(
                       icon: Icons.search,
                       tooltip: 'Offline search',
-                      onPressed: _ready ? _openSearch : null,
+                      onPressed: _openSearch,
                     ),
                     const SizedBox(width: 8),
                     _MapButton(
@@ -730,7 +733,7 @@ class _MapPaneState extends ConsumerState<_MapPane>
                 _MapButton(
                   icon: Icons.my_location,
                   tooltip: 'My location',
-                  onPressed: _ready ? _locate : null,
+                  onPressed: _locate,
                 ),
               ],
             ),

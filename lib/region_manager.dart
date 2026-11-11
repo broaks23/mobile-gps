@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'services/region_packages.dart';
 import 'services/sample_region_installer.dart';
+import 'services/app_updates.dart';
 
 String formatBytes(int bytes) {
   if (bytes < 1024) return '$bytes B';
@@ -41,11 +42,85 @@ class _RegionManagerState extends State<RegionManager> {
   TransferCancel? _cancel;
   bool _busy = false;
   String? _detail, _resolution;
+  final _updates = AppUpdates();
+  String _appVersion = 'Loading…';
+  String? _updateMessage;
+  AppRelease? _update;
+  bool _updateBusy = false;
+  bool _updateDownloaded = false;
+  double? _updateProgress;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    try {
+      final version = await _updates.currentVersion();
+      if (mounted) setState(() => _appVersion = version);
+    } catch (_) {
+      if (mounted) setState(() => _appVersion = 'Unavailable');
+    }
+  }
+
+  Future<void> _checkUpdates() async {
+    setState(() {
+      _updateBusy = true;
+      _updateMessage = null;
+      _update = null;
+      _updateDownloaded = false;
+      _updateProgress = null;
+    });
+    try {
+      final version = await _updates.currentVersion();
+      final release = await _updates.check(version);
+      if (mounted) {
+        setState(() {
+          _appVersion = version;
+          _update = release;
+          _updateMessage = release == null
+              ? 'You have the latest release.'
+              : 'A new version is available.';
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _updateMessage = 'Update check failed: $error');
+      }
+    } finally {
+      if (mounted) setState(() => _updateBusy = false);
+    }
+  }
+
+  Future<void> _installUpdate() async {
+    final release = _update;
+    if (release == null) return;
+    setState(() {
+      _updateBusy = true;
+      _updateMessage = null;
+    });
+    try {
+      final status = _updateDownloaded
+          ? await _updates.installDownloaded()
+          : await _updates.downloadAndInstall(release, (bytes, total) {
+              if (mounted) setState(() => _updateProgress = bytes / total);
+            });
+      if (mounted) {
+        setState(() {
+          _updateDownloaded = true;
+          _updateMessage = status == 'permission'
+              ? 'Allow installs from Ridgewalk, return here, and tap Install update again.'
+              : 'Confirm the update in Android’s installer.';
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => _updateMessage = 'Update failed: $error');
+    } finally {
+      if (mounted) setState(() => _updateBusy = false);
+    }
   }
 
   Future<void> _load() async {
@@ -245,6 +320,29 @@ class _RegionManagerState extends State<RegionManager> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const Text(
+            'App settings',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          Text('Current version: $_appVersion'),
+          Wrap(
+            spacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _updateBusy ? null : _checkUpdates,
+                icon: const Icon(Icons.system_update),
+                label: const Text('Check for updates'),
+              ),
+              if (_update != null)
+                FilledButton(
+                  onPressed: _updateBusy ? null : _installUpdate,
+                  child: Text('Install update v${_update!.version}'),
+                ),
+            ],
+          ),
+          if (_updateBusy) LinearProgressIndicator(value: _updateProgress),
+          if (_updateMessage != null) Text(_updateMessage!),
+          const Divider(),
           const Text(
             'Choose an area on the map',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),

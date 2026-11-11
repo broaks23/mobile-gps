@@ -69,7 +69,7 @@ function styleFor(region?: Region, terrainAvailable = false): StyleSpecification
     version: 8,
     name: 'Ridgewalk offline',
     sources: {},
-    layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#dce6dc' } }],
+    layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#e9e2c4' } }],
   };
   if (!region) return style;
 
@@ -101,7 +101,7 @@ function styleFor(region?: Region, terrainAvailable = false): StyleSpecification
     };
     style.layers.push({
       id: 'terrain-hillshade', type: 'hillshade', source: 'elevation',
-      paint: { 'hillshade-exaggeration': 0.55, 'hillshade-shadow-color': '#455b59', 'hillshade-highlight-color': '#f5f1dc' },
+      paint: { 'hillshade-exaggeration': 0.35, 'hillshade-shadow-color': '#506151', 'hillshade-highlight-color': '#fff5cf' },
     });
   }
   const layers: StyleSpecification['layers'] = [
@@ -306,6 +306,7 @@ async function start(): Promise<void> {
 
   let initialized = false;
   map.on('style.load', () => {
+    try {
     map.addSource(accuracySource, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({ id: 'location-accuracy-fill', type: 'fill', source: accuracySource,
       paint: { 'fill-color': '#287fd0', 'fill-opacity': 0.16 } });
@@ -337,9 +338,15 @@ async function start(): Promise<void> {
     } else {
       showStatus('No offline region installed yet');
     }
-    bridge('ready', { hasRegion: Boolean(region), hasTerrain: terrainAvailable });
-    sendMapState();
-    sendTerrainState();
+    } catch (error) {
+      bridge('error', { message: `Map setup: ${String(error)}` });
+      showStatus('Some map controls could not be initialized.', true);
+    } finally {
+      if (!initialized) initialized = true;
+      bridge('ready', { hasRegion: Boolean(region), hasTerrain: terrainAvailable });
+      sendMapState();
+      sendTerrainState();
+    }
   });
   map.on('idle', () => {
     if (mapAvailable && !mapLoaded && map.isSourceLoaded('hiking')) {

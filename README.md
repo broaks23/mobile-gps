@@ -17,12 +17,14 @@ The script cleans Flutter output, installs renderer dependencies, bundles the lo
 To publish a new GitHub release, first update `version` in `pubspec.yaml`. Create a fine-grained token for `broaks23/mobile-gps` with **Contents: read and write**, copy `.env.example` to `.env`, and put the token in `GITHUB_TOKEN`. Alternatively, set `GITHUB_TOKEN` in your shell. Then run:
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass -File .\scripts\publish-android-apk.ps1 -Tag v0.4.1
+powershell.exe -ExecutionPolicy Bypass -File .\scripts\publish-android-apk.ps1 -Tag v0.5.0
 ```
 
-The script builds locally, creates a draft GitHub release, uploads the APK and checksum, and publishes it as a prerelease. Add `-Stable` for a normal release. For a new tag, GitHub uses its default branch, or the existing remote ref supplied with `-TargetCommitish dev`; an existing tag keeps its target. The script never commits or pushes code. The APK is built from your local working tree, which may differ from that remote ref. GitHub may also require **Workflows: write** if the selected remote ref changes workflow files relative to the default branch.
+The script builds locally, creates a draft GitHub release, uploads the APK and checksum, and publishes it as a normal release. The tag must match the version in `pubspec.yaml`, for example `version: 0.5.0+2` and `-Tag v0.5.0`. Increase both the version and the number after `+` for each update so Android accepts it. For a new tag, GitHub uses its default branch, or the existing remote ref supplied with `-TargetCommitish dev`; an existing tag keeps its target. The script never commits or pushes code. The APK is built from your local working tree, which may differ from that remote ref. GitHub may also require **Workflows: write** if the selected remote ref changes workflow files relative to the default branch.
 
 The current Android release build uses the local debug signing key. A key different from the one used for an existing installation can require uninstalling the old app, which removes its stored regions. Keep the same key for updates and configure a private release key before distributing production builds.
+
+In Offline regions, **Check for updates** checks the latest normal GitHub release when online. **Install update** downloads the APK and verifies its checksum and signing key, then opens Android's installer; Android may first ask you to allow Ridgewalk to install apps and will require confirmation. The existing 0.4.1 installation needs this version installed manually once before it can check for future updates. These are full APK updates; installed regions remain in place when Android accepts an update signed with the same key.
 
 Project convention: do not add automated tests or automatically commit or push code changes.
 
