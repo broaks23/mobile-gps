@@ -20,10 +20,14 @@ enum LocationPhase {
 
 abstract interface class LocationBackend {
   Future<LocationAccess> requestAccess();
+  Future<Position?> lastKnownPosition();
   Stream<Position> positions();
 }
 
 class GeolocatorBackend implements LocationBackend {
+  @override
+  Future<Position?> lastKnownPosition() => Geolocator.getLastKnownPosition();
+
   @override
   Future<LocationAccess> requestAccess() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
@@ -42,20 +46,33 @@ class GeolocatorBackend implements LocationBackend {
   }
 
   @override
-  Stream<Position> positions() {
-    final LocationSettings settings = Platform.isAndroid
-        ? AndroidSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 10,
-            intervalDuration: const Duration(seconds: 5),
-            // Android LocationManager can obtain satellite fixes without Play Services.
-            forceLocationManager: true,
-          )
-        : const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 10,
-          );
-    return Geolocator.getPositionStream(locationSettings: settings);
+  Stream<Position> positions() async* {
+    if (!Platform.isAndroid) {
+      yield* Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 10,
+        ),
+      );
+      return;
+    }
+    AndroidSettings settings({required bool forceLocationManager}) =>
+        AndroidSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 10,
+          intervalDuration: const Duration(seconds: 5),
+          forceLocationManager: forceLocationManager,
+        );
+    try {
+      yield* Geolocator.getPositionStream(
+        locationSettings: settings(forceLocationManager: false),
+      );
+    } catch (_) {
+      // A phone without Play Services can still receive satellite fixes.
+      yield* Geolocator.getPositionStream(
+        locationSettings: settings(forceLocationManager: true),
+      );
+    }
   }
 }
 
@@ -168,21 +185,7 @@ class LiveLocationController extends Notifier<LiveLocationState> {
       _subscription = backend.positions().listen(
         (position) {
           if (!_wanted || generation != _generation) return;
-          if (!position.latitude.isFinite ||
-              !position.longitude.isFinite ||
-              position.latitude.abs() > 90 ||
-              position.longitude.abs() > 180) {
-            return;
-          }
-          if (DateTime.now().difference(position.timestamp).abs() >
-              const Duration(minutes: 2)) {
-            return;
-          }
-          state = LiveLocationState(
-            phase: LocationPhase.active,
-            position: position,
-            follow: state.follow,
-          );
+          _acceptPosition(position);
         },
         onError: (Object error) {
           if (generation != _generation) return;
@@ -206,6 +209,19 @@ class LiveLocationController extends Notifier<LiveLocationState> {
           );
         },
       );
+      // The stream may wait for a new satellite fix. A recent cached fix gives
+      // the location button an immediate position without starting a second GPS request.
+      try {
+        final cached = await backend.lastKnownPosition();
+        if (_wanted &&
+            generation == _generation &&
+            state.position == null &&
+            cached != null) {
+          _acceptPosition(cached);
+        }
+      } catch (_) {
+        // A cached fix is optional; leave the live stream running.
+      }
     } catch (error) {
       if (generation != _generation) return;
       _wanted = false;
@@ -214,6 +230,22 @@ class LiveLocationController extends Notifier<LiveLocationState> {
         error: error.toString(),
       );
     }
+  }
+
+  void _acceptPosition(Position position) {
+    if (!position.latitude.isFinite ||
+        !position.longitude.isFinite ||
+        position.latitude.abs() > 90 ||
+        position.longitude.abs() > 180 ||
+        DateTime.now().difference(position.timestamp).abs() >
+            const Duration(minutes: 2)) {
+      return;
+    }
+    state = LiveLocationState(
+      phase: LocationPhase.active,
+      position: position,
+      follow: state.follow,
+    );
   }
 
   void setFollow(bool value) {

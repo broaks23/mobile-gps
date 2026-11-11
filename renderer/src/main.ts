@@ -19,6 +19,7 @@ type Region = {
   terrainUrl?: string;
   peaksUrl?: string;
   terrainEncoding?: 'mapbox' | 'terrarium';
+  terrainTileSize?: 256 | 512;
   attribution: string;
   mapAttribution?: string;
   terrainAttribution?: string;
@@ -30,7 +31,8 @@ type Command =
   | { type: 'setExaggeration'; value: number }
   | { type: 'flyTo'; longitude: number; latitude: number }
   | { type: 'showSearchResult'; longitude: number; latitude: number }
-  | { type: 'updateLocation'; longitude: number; latitude: number; accuracy: number | null; heading: number | null; follow: boolean }
+  | { type: 'clearSearchResult' }
+  | { type: 'updateLocation'; longitude: number; latitude: number; accuracy: number | null; heading: number | null; follow: boolean; center: boolean }
   | { type: 'centerLocation' | 'clearLocation' }
   | { type: 'selectBounds' | 'cancelBounds' }
   | { type: 'showBounds'; bounds: Bounds };
@@ -96,7 +98,7 @@ function styleFor(region?: Region, terrainAvailable = false): StyleSpecification
       type: 'raster-dem',
       url: `pmtiles://${region.terrainUrl}`,
       encoding: region.terrainEncoding ?? 'mapbox',
-      tileSize: region.vectorSchema === 'shortbread-1.0' ? 512 : 256,
+      tileSize: region.terrainTileSize ?? (region.vectorSchema === 'shortbread-1.0' ? 512 : 256),
       attribution: region.terrainAttribution ?? region.attribution,
     };
     style.layers.push({
@@ -161,24 +163,28 @@ async function start(): Promise<void> {
   let terrainAvailable = false;
   let terrainError: string | undefined;
   let demArchive: PMTiles | undefined;
+  let demMime = 'image/png';
   let demMaxZoom = 0;
   if (region?.terrainUrl) {
     showStatus('Checking local elevation tiles…');
     try {
       const archive = new PMTiles(region.terrainUrl);
       const header = await archive.getHeader();
-      const expectedType = region.vectorSchema === 'shortbread-1.0' ? TileType.Webp : TileType.Png;
-      if (header.tileType !== expectedType || header.minZoom > header.maxZoom) {
+      if (![TileType.Png, TileType.Webp].includes(header.tileType) || header.minZoom > header.maxZoom) {
         throw new Error('DEM archive has an incompatible tile format');
       }
-      const zoom = header.maxZoom;
+      demMime = header.tileType === TileType.Webp ? 'image/webp' : 'image/png';
       const longitude = (region.bounds[0] + region.bounds[2]) / 2;
       const latitude = (region.bounds[1] + region.bounds[3]) / 2;
-      const x = Math.floor((longitude + 180) / 360 * 2 ** zoom);
-      const y = Math.floor((1 - Math.asinh(Math.tan(latitude * Math.PI / 180)) / Math.PI) / 2 * 2 ** zoom);
-      const tile = await archive.getZxy(zoom, x, y);
+      let tile;
+      for (let zoom = header.maxZoom; zoom >= header.minZoom; zoom--) {
+        const x = Math.floor((longitude + 180) / 360 * 2 ** zoom);
+        const y = Math.floor((1 - Math.asinh(Math.tan(latitude * Math.PI / 180)) / Math.PI) / 2 * 2 ** zoom);
+        tile = await archive.getZxy(zoom, x, y);
+        if (tile) break;
+      }
       const signature = tile && new Uint8Array(tile.data).slice(0, 8);
-      const valid = signature && (expectedType === TileType.Png
+      const valid = signature && (header.tileType === TileType.Png
         ? signature.join(',') === '137,80,78,71,13,10,26,10'
         : String.fromCharCode(...signature.slice(0, 4)) === 'RIFF');
       if (!valid) {
@@ -261,7 +267,7 @@ async function start(): Promise<void> {
       const y = (1 - Math.asinh(Math.tan(latitude * Math.PI / 180)) / Math.PI) / 2 * size;
       const tile = await demArchive.getZxy(zoom, Math.floor(x), Math.floor(y));
       if (!tile) continue;
-      const bitmap = await createImageBitmap(new Blob([tile.data], { type: region?.vectorSchema === 'shortbread-1.0' ? 'image/webp' : 'image/png' }),
+      const bitmap = await createImageBitmap(new Blob([tile.data], { type: demMime }),
         { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
       try {
         const canvas = document.createElement('canvas');
@@ -449,7 +455,7 @@ async function start(): Promise<void> {
         case 'zoomOut': map.zoomOut(); break;
         case 'resetCamera': resetCamera(); break;
         case 'updateLocation': {
-          const { longitude, latitude, accuracy, heading, follow } = command;
+          const { longitude, latitude, accuracy, heading, follow, center } = command;
           if (!Number.isFinite(longitude) || !Number.isFinite(latitude) ||
               Math.abs(longitude) > 180 || Math.abs(latitude) > 90) break;
           if (Math.abs(latitude) > 85) {
@@ -469,7 +475,10 @@ async function start(): Promise<void> {
           locationElement?.classList.toggle('poor-accuracy', accuracy == null || accuracy > 100);
           locationMarker.setRotation(heading ?? 0);
           showAccuracy(longitude, latitude, accuracy);
-          if (follow && accuracy != null && accuracy > 0 && accuracy <= 100) {
+          if (center) {
+            map.jumpTo({ center: currentLocation, zoom: Math.max(map.getZoom(), 13) });
+            bridge('cameraCentered', { latitude, longitude });
+          } else if (follow && accuracy != null && accuracy > 0 && accuracy <= 100) {
             map.easeTo({ center: currentLocation, zoom: Math.max(map.getZoom(), 13), duration: 700 });
           }
           const sequence = ++locationSequence;
@@ -482,7 +491,7 @@ async function start(): Promise<void> {
           break;
         }
         case 'centerLocation':
-          if (currentLocation) map.easeTo({ center: currentLocation, zoom: Math.max(map.getZoom(), 13), duration: 700 });
+          if (currentLocation) map.jumpTo({ center: currentLocation, zoom: Math.max(map.getZoom(), 13) });
           break;
         case 'clearLocation':
           locationSequence++; locationMarker?.remove(); locationMarker = undefined; locationElement = undefined;
@@ -532,14 +541,17 @@ async function start(): Promise<void> {
             searchMarker?.remove();
             searchMarker = new Marker({ color: '#b44f2a' })
               .setLngLat([command.longitude, command.latitude]).addTo(map);
-            map.flyTo({ center: [command.longitude, command.latitude],
-              zoom: Math.max(map.getZoom(), 13), essential: true });
+            map.jumpTo({ center: [command.longitude, command.latitude],
+              zoom: Math.max(map.getZoom(), 13) });
+            bridge('cameraCentered', { latitude: command.latitude, longitude: command.longitude });
             if (region && (command.longitude < region.bounds[0] || command.longitude > region.bounds[2] ||
                 command.latitude < region.bounds[1] || command.latitude > region.bounds[3])) {
               bridge('notice', { message: 'No offline map tiles cover these coordinates' });
             }
           }
           break;
+        case 'clearSearchResult':
+          searchMarker?.remove(); searchMarker = undefined; break;
       }
     },
   };

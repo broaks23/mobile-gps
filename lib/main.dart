@@ -109,6 +109,8 @@ class _MapPaneState extends ConsumerState<_MapPane>
   double _centerLongitude = 25.47;
   List<double>? _selectedBounds;
   SearchResult? _pendingSearchResult;
+  SearchResult? _selectedSearchResult;
+  bool _centerOnNextFix = false;
   AltitudeSource _altitudeSource = AltitudeSource.gps;
   double? _locationTerrain;
   bool _locationTerrainPending = false;
@@ -312,6 +314,7 @@ class _MapPaneState extends ConsumerState<_MapPane>
   }
 
   Future<void> _locate() async {
+    _centerOnNextFix = true;
     final location = ref.read(liveLocationProvider);
     if (location.phase == LocationPhase.off ||
         location.phase == LocationPhase.denied ||
@@ -320,7 +323,10 @@ class _MapPaneState extends ConsumerState<_MapPane>
         location.phase == LocationPhase.error) {
       await ref.read(liveLocationProvider.notifier).start();
     } else if (location.position != null) {
-      await _send({'type': 'centerLocation'});
+      ref.read(liveLocationProvider.notifier).setFollow(true);
+      await _syncLocation(ref.read(liveLocationProvider));
+    } else {
+      _showError('Waiting for a GPS fix. Check that device location is on.');
     }
   }
 
@@ -362,7 +368,9 @@ class _MapPaneState extends ConsumerState<_MapPane>
           : null,
       'heading': location.reliableCourse,
       'follow': location.shouldFollow,
+      'center': _centerOnNextFix,
     });
+    _centerOnNextFix = false;
   }
 
   Future<void> _installSample() async {
@@ -429,6 +437,9 @@ class _MapPaneState extends ConsumerState<_MapPane>
       ),
     );
     if (result == null || !mounted) return;
+    ref.read(liveLocationProvider.notifier).setFollow(false);
+    setState(() => _selectedSearchResult = result);
+    await WidgetsBinding.instance.endOfFrame;
     if (result.regionId != null &&
         widget.server.activeRegionId != result.regionId) {
       widget.server.selectRegion(result.regionId!);
@@ -440,68 +451,6 @@ class _MapPaneState extends ConsumerState<_MapPane>
     } else {
       await _showSearchMarker(result);
     }
-    if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(result.name, style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 4),
-              Text(categoryLabel(result.category)),
-              if (result.elevationMeters != null)
-                Text(
-                  'Elevation: ${result.elevationMeters!.toStringAsFixed(0)} m',
-                ),
-              const SizedBox(height: 12),
-              SelectableText(result.coordinates),
-              TextButton.icon(
-                onPressed: () async {
-                  await Clipboard.setData(
-                    ClipboardData(text: result.coordinates),
-                  );
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Coordinates copied')),
-                    );
-                  }
-                },
-                icon: const Icon(Icons.copy),
-                label: const Text('Copy coordinates'),
-              ),
-              if (result.attributes.isNotEmpty) ...[
-                const Divider(),
-                Text(
-                  'OSM attributes',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 250),
-                  child: ListView(
-                    shrinkWrap: true,
-                    children: result.attributes.entries
-                        .map(
-                          (entry) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 3),
-                            child: Text(
-                              '${entry.key.replaceAll('_', ' ')}: ${entry.value}',
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   Future<void> _showSearchMarker(SearchResult result) => _send({
@@ -766,6 +715,99 @@ class _MapPaneState extends ConsumerState<_MapPane>
                 onFollow: () => ref
                     .read(liveLocationProvider.notifier)
                     .setFollow(!location.follow),
+              ),
+            ),
+          ),
+        if (_selectedSearchResult case final result?)
+          Positioned(
+            left: 12,
+            right: 12,
+            bottom: MediaQuery.paddingOf(context).bottom + 12,
+            child: Card(
+              elevation: 5,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 8, 10),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            result.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Center on result',
+                          onPressed: () => _showSearchMarker(result),
+                          icon: const Icon(Icons.center_focus_strong),
+                        ),
+                        IconButton(
+                          tooltip: 'Close result',
+                          onPressed: () {
+                            setState(() => _selectedSearchResult = null);
+                            _send({'type': 'clearSearchResult'});
+                          },
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      '${categoryLabel(result.category)} · ${result.coordinates}',
+                    ),
+                    if (result.elevationMeters != null)
+                      Text(
+                        'Elevation: ${result.elevationMeters!.toStringAsFixed(0)} m',
+                      ),
+                    Row(
+                      children: [
+                        TextButton.icon(
+                          onPressed: () async {
+                            await Clipboard.setData(
+                              ClipboardData(text: result.coordinates),
+                            );
+                            if (mounted) _showError('Coordinates copied');
+                          },
+                          icon: const Icon(Icons.copy),
+                          label: const Text('Copy coordinates'),
+                        ),
+                        if (result.attributes.isNotEmpty)
+                          TextButton(
+                            onPressed: () => showModalBottomSheet<void>(
+                              context: context,
+                              builder: (sheetContext) => SafeArea(
+                                child: ListView(
+                                  padding: const EdgeInsets.all(16),
+                                  children: [
+                                    Text(
+                                      'OSM attributes',
+                                      style: Theme.of(
+                                        sheetContext,
+                                      ).textTheme.titleMedium,
+                                    ),
+                                    ...result.attributes.entries.map(
+                                      (entry) => ListTile(
+                                        dense: true,
+                                        title: Text(
+                                          entry.key.replaceAll('_', ' '),
+                                        ),
+                                        subtitle: Text(entry.value),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            child: const Text('Details'),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

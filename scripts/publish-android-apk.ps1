@@ -2,7 +2,8 @@ param(
     [string]$Tag,
     [string]$TargetCommitish,
     [switch]$BuildOnly,
-    [switch]$Stable
+    [switch]$Stable,
+    [string]$ExpectedSignerSha256 = '998e07e3fcdb375451e060ba5031b4e0ed13460e5b57aa4ee7a61afe782085b1'
 )
 
 Set-StrictMode -Version Latest
@@ -84,6 +85,32 @@ try {
     Write-Host "APK: $asset"
     Write-Host "SHA-256: $hash"
     if ($BuildOnly) { return }
+
+    # The published v0.5.0 APK has this certificate. Android refuses updates
+    # signed by another key, even when package name and version are correct.
+    $sdk = $env:ANDROID_HOME
+    if (-not $sdk) { $sdk = $env:ANDROID_SDK_ROOT }
+    if (-not $sdk) {
+        $localProperties = Join-Path $repo 'android/local.properties'
+        if (Test-Path -LiteralPath $localProperties) {
+            $sdkLine = Get-Content -LiteralPath $localProperties | Where-Object { $_ -match '^sdk\.dir=' } | Select-Object -First 1
+            if ($sdkLine) { $sdk = ($sdkLine -replace '^sdk\.dir=', '').Replace('\:', ':').Replace('\\', '\') }
+        }
+    }
+    if (-not $sdk) { throw 'Android SDK path is needed to verify the APK signing certificate.' }
+    $signerTool = Get-ChildItem -LiteralPath (Join-Path $sdk 'build-tools') -Directory |
+        Sort-Object { [version]($_.Name -replace '[^0-9.]', '') } -Descending |
+        ForEach-Object { Join-Path $_.FullName 'apksigner.bat' } |
+        Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+    if (-not $signerTool) { throw 'Could not find apksigner.bat in the Android SDK.' }
+    $signerOutput = & $signerTool verify --print-certs $asset 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0 -or $signerOutput -notmatch 'Signer #1 certificate SHA-256 digest:\s*([0-9a-fA-F]{64})') {
+        throw 'Could not verify the APK signing certificate.'
+    }
+    $actualSigner = $Matches[1].ToLowerInvariant()
+    if ($actualSigner -ne $ExpectedSignerSha256.ToLowerInvariant()) {
+        throw "APK signing key differs from the installed release. Expected $ExpectedSignerSha256, got $actualSigner. Recover the prior keystore before publishing an update."
+    }
 
     $headers = @{
         Authorization = "Bearer $token"

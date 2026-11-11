@@ -20,6 +20,7 @@ class RegionPackage {
     this.mapDetail,
     this.terrainResolution,
     this.terrainEncoding,
+    this.terrainTileSize,
     this.vectorSchema,
     this.files,
     this.licenses,
@@ -30,6 +31,7 @@ class RegionPackage {
   );
 
   final String id, name, mapDetail, terrainResolution, terrainEncoding;
+  final int terrainTileSize;
   final String vectorSchema;
   final int searchIndexVersion;
   final String mapAttribution, terrainAttribution;
@@ -97,6 +99,11 @@ class RegionPackage {
     if (schema != 'ridgewalk-hiking-v1' && schema != 'shortbread-1.0') {
       throw const FormatException('Unsupported vector schema');
     }
+    final tileSize =
+        value['terrainTileSize'] ?? (schema == 'shortbread-1.0' ? 512 : 256);
+    if (tileSize != 256 && tileSize != 512) {
+      throw const FormatException('Unsupported DEM tile size');
+    }
     final indexVersion = value['searchIndexVersion'] ?? 1;
     if (indexVersion is! int || indexVersion < 1 || indexVersion > 2) {
       throw const FormatException('Unsupported search index version');
@@ -108,6 +115,7 @@ class RegionPackage {
       detail,
       resolution,
       encoding,
+      tileSize as int,
       schema,
       files,
       stringMap('licenses'),
@@ -502,6 +510,7 @@ class RegionStore {
               package.mapDetail != expected.mapDetail ||
               package.terrainResolution != expected.terrainResolution ||
               package.terrainEncoding != expected.terrainEncoding ||
+              package.terrainTileSize != expected.terrainTileSize ||
               package.vectorSchema != expected.vectorSchema ||
               package.searchIndexVersion != expected.searchIndexVersion ||
               jsonEncode(package.bounds) != jsonEncode(expected.bounds) ||

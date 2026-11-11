@@ -17,12 +17,12 @@ The script cleans Flutter output, installs renderer dependencies, bundles the lo
 To publish a new GitHub release, first update `version` in `pubspec.yaml`. Create a fine-grained token for `broaks23/mobile-gps` with **Contents: read and write**, copy `.env.example` to `.env`, and put the token in `GITHUB_TOKEN`. Alternatively, set `GITHUB_TOKEN` in your shell. Then run:
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass -File .\scripts\publish-android-apk.ps1 -Tag v0.5.0
+powershell.exe -ExecutionPolicy Bypass -File .\scripts\publish-android-apk.ps1 -Tag v0.5.1
 ```
 
-The script builds locally, creates a draft GitHub release, uploads the APK and checksum, and publishes it as a normal release. The tag must match the version in `pubspec.yaml`, for example `version: 0.5.0+2` and `-Tag v0.5.0`. Increase both the version and the number after `+` for each update so Android accepts it. For a new tag, GitHub uses its default branch, or the existing remote ref supplied with `-TargetCommitish dev`; an existing tag keeps its target. The script never commits or pushes code. The APK is built from your local working tree, which may differ from that remote ref. GitHub may also require **Workflows: write** if the selected remote ref changes workflow files relative to the default branch.
+The script builds locally, creates a draft GitHub release, uploads the APK and checksum, and publishes it as a normal release. The tag must match the version in `pubspec.yaml`, for example `version: 0.5.1+3` and `-Tag v0.5.1`. Increase both the version and the number after `+` for each update so Android accepts it. For a new tag, GitHub uses its default branch, or the existing remote ref supplied with `-TargetCommitish dev`; an existing tag keeps its target. The script never commits or pushes code. The APK is built from your local working tree, which may differ from that remote ref. GitHub may also require **Workflows: write** if the selected remote ref changes workflow files relative to the default branch.
 
-The current Android release build uses the local debug signing key. A key different from the one used for an existing installation can require uninstalling the old app, which removes its stored regions. Keep the same key for updates and configure a private release key before distributing production builds.
+The current Android release build uses the local debug signing key. The publish script checks its certificate against the locally saved v0.5.0 release certificate and stops before uploading if it differs. Android requires the same signing key for an in-place update; recover the original `debug.keystore` before publishing. Reinstalling with a different key removes app data and installed regions. Keep a secure backup of the signing key for future releases.
 
 In Offline regions, **Check for updates** checks the latest normal GitHub release when online. **Install update** downloads the APK and verifies its checksum and signing key, then opens Android's installer; Android may first ask you to allow Ridgewalk to install apps and will require confirmation. The existing 0.4.1 installation needs this version installed manually once before it can check for future updates. These are full APK updates; installed regions remain in place when Android accepts an update signed with the same key.
 
@@ -51,3 +51,24 @@ cd ..
 ```
 
 The OSM data requires attribution and is subject to the [ODbL](https://www.openstreetmap.org/copyright); terrain source credits and license details are in the package metadata and [Mapterhorn's attribution](https://mapterhorn.com/attribution/). See `map-tools/romania-sources.json` for the source provenance and checksums.
+
+### Higher-detail Țarcu Mountains package
+
+`map-tools/.cache/romania/tarcu-hd/tarcu-hd.rwpkg` is a prepared 325 MB package covering 22.68–22.89°E, 45.28–45.43°N. It has locally extracted OSM vector tiles to z14, 173 indexed places, and Mapterhorn Terrarium WebP terrain to z16 (512-pixel tiles). The high-zoom archive contains a tile at the package center. MapLibre renders the terrain as a 3D mesh; z16 is the tile zoom level and does **not** mean all underlying elevations have 0.5 m accuracy. Mapterhorn lists ANCPI's 0.5 m LAKI II among its Romanian sources, with mixed-source coverage; see [data access](https://mapterhorn.com/data-access/) and [source attribution](https://mapterhorn.com/attribution/). The Bucegi area has no Mapterhorn z13+ coverage, so the bundled Bucegi terrain remains lower resolution. The full Romania package remains the country-wide option.
+
+To download this package to the phone over the LAN, from the repository root run:
+
+```powershell
+node .\lan-server\server.mjs --package .\map-tools\.cache\romania\tarcu-hd\tarcu-hd.rwpkg --entry .\map-tools\.cache\romania\tarcu-hd\catalog-entry.json
+```
+
+In **Offline regions**, enter the displayed catalog URL and download **Țarcu Mountains HD**, then select it in installed regions. It uses a separate region ID, so the existing Romania package remains installed. Allow about 700 MB free during download and installation; the installed region is about 325 MB. You can also import the `.rwpkg` file directly from phone storage. The files are local and ignored by Git.
+
+To rebuild, install the official [PMTiles CLI](https://github.com/protomaps/go-pmtiles/releases), set `PMTILES_BIN` to its executable path (or put it on `PATH`), and ensure the Romania source files named in `map-tools/romania-sources.json` are present. Then run:
+
+```powershell
+cd map-tools
+node build-tarcu-hd.mjs
+```
+
+The script checks the local source checksums, extracts from Mapterhorn's downloadable **archive** (not its public tile endpoint), merges base and high-zoom terrain, clips the local OSM vector archive, subsets the local SQLite search index, and writes a checksum-protected region package and LAN catalog entry. Cached intermediate PMTiles files in `map-tools/.cache/romania/tarcu-hd` are reused; remove individual intermediate files before rebuilding if you need to refresh a changed Mapterhorn dataset. Source data attribution and license details travel in `package.json` inside the package.

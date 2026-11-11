@@ -280,6 +280,10 @@ class LocalResourceServer {
           region['terrainUrl'] =
               'http://127.0.0.1:${_server.port}$_basePath/regions/$id/terrain.pmtiles';
           region['terrainEncoding'] = encoding as String;
+          final tileSize = raw['terrainTileSize'];
+          if (tileSize == 256 || tileSize == 512) {
+            region['terrainTileSize'] = tileSize as int;
+          }
           if (raw['terrainAttribution'] is String) {
             region['terrainAttribution'] = raw['terrainAttribution'] as String;
           }
